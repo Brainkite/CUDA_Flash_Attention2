@@ -1,5 +1,6 @@
 import unittest
 import torch
+import torch.nn.functional as F
 import math
 import numpy as np
 import numba.cuda as ncuda
@@ -56,7 +57,8 @@ def flash_attention(Q, K, V, O, L, BrDim, BcDim, N, dim):
                 Qs[i * dim + j] = Q[idx * dim + j]
 
     ### Loop over column blocks of K and V
-    for BcIdx in range(0, N, BcDim):
+    num_Bc = (N + BcDim - 1) // BcDim
+    for BcIdx in range(0, num_Bc):
 
         ### Load K and V into shared memory
         for i in range(TrIdx, BcDim, TrDim):
@@ -127,8 +129,7 @@ def flash_attention(Q, K, V, O, L, BrDim, BcDim, N, dim):
                         if BcIdx * BcDim + k < N:
                             pv += Ss[i * BcDim + k] * Vs[k * dim + j]
                     Os[i * dim + j] = Os[i * dim + j] / expMaxDelta[i] + pv
-        # End of loop over column blocks of K and V
-    ncuda.syncthreads()
+        ncuda.syncthreads()
 
     ### Update final Oi and li
     for i in range(TrIdx, BrDim, TrDim):
@@ -148,14 +149,17 @@ def flash_attention(Q, K, V, O, L, BrDim, BcDim, N, dim):
             if TcIdx == 0:
                 L[idx] = ls[i]
     
-
+def standard_attention(Q, K, V):
+    d = Q.size(-1)
+    scores = torch.matmul(Q, K.transpose(-2, -1)) / (d ** 0.5)
+    attn = F.softmax(scores, dim=-1)
+    output = torch.matmul(attn, V)
+    return output, scores
 
 class TestFlashAttention(CUDATestCase):
     def test_flash_attention(self):
         # Test parameters
-        BS = 8
-        NH = 12
-        N = BS * NH
+        N = 1024
         dim = 64
 
         # Calculate BrDim and BcDim based on shared memory constraints
@@ -169,7 +173,7 @@ class TestFlashAttention(CUDATestCase):
             shared_mem_size = (2 * (BrDim * dim) + 2 * (BcDim * dim) + (BrDim * BcDim) + 3 * BrDim) * 4
 
         # Calculate threads per block and blocks per grid
-        TrDim = 32
+        TrDim = 16
         TcDim = 32
         tpb = (TcDim, TrDim)
         blocks = cdiv(N,BrDim)
@@ -177,11 +181,11 @@ class TestFlashAttention(CUDATestCase):
         print('blocks:', blocks, 'tpb:', tpb, 'shared_mem_size:', shared_mem_size, "max_shared_mem_bytes:", max_shared_mem_bytes)
 
         # Prepare input and output arrays
-        Q = torch.randn(BS * NH * dim, dtype=torch.float32).contiguous().cuda()
-        K = torch.randn(BS * NH * dim, dtype=torch.float32).contiguous().cuda()
-        V = torch.randn(BS * NH * dim, dtype=torch.float32).contiguous().cuda()
-        output_O = torch.zeros(BS * NH * dim, dtype=torch.float32).contiguous().cuda()
-        output_L = torch.zeros(BS * NH, dtype=torch.float32).contiguous().cuda()
+        Q = torch.randn(N * dim, dtype=torch.float32).contiguous().cuda()
+        K = torch.randn(N * dim, dtype=torch.float32).contiguous().cuda()
+        V = torch.randn(N * dim, dtype=torch.float32).contiguous().cuda()
+        output_O = torch.zeros(N * dim, dtype=torch.float32).contiguous().cuda()
+        output_L = torch.zeros(N, dtype=torch.float32).contiguous().cuda()
 
 
         flash_attention[blocks, tpb, 0, shared_mem_size](ca(Q), ca(K), ca(V), ca(output_O), ca(output_L), BrDim, BcDim, N, dim)
@@ -193,8 +197,8 @@ class TestFlashAttention(CUDATestCase):
         expected_O_torch = torch.nn.functional.scaled_dot_product_attention(Q_torch, K_torch, V_torch)
         expected_O_torch = expected_O_torch.flatten()
 
-        print("expected_torch_O  :", expected_O_torch[:5], expected_O_torch[-5:])
-        print("output_O    :", output_O[:5], output_O[-5:])
+        print("expected_torch_O  :", expected_O_torch.shape, expected_O_torch[:5], expected_O_torch[-5:])
+        print("output_O    :", output_O.shape, output_O[:5], output_O[-5:])
         torch.testing.assert_close(output_O.cpu(), expected_O_torch.cpu())
 
 if __name__ == '__main__':
