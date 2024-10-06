@@ -10,7 +10,7 @@ from python_numba_cuda.src.utils import cdiv
 torch.set_printoptions(precision=4)
 
 @ncuda.jit
-def flash_attention(Q, K, V, O, L, BrDim, BcDim, N, dim):
+def flash_attention(Q, K, V, O, L, BrDim, BcDim, Bs, Nh, N, dim):
     """
     # Prepare shared memory
     # load Q row block into shared memory
@@ -25,10 +25,15 @@ def flash_attention(Q, K, V, O, L, BrDim, BcDim, N, dim):
     # write to output
     """
     BrIdx = ncuda.blockIdx.x
+    NhIdx = ncuda.blockIdx.y
+    BsIdx = ncuda.blockIdx.z
     TcDim = ncuda.blockDim.x
     TrDim = ncuda.blockDim.y
     TcIdx = ncuda.threadIdx.x
     TrIdx = ncuda.threadIdx.y
+
+    # Compute the offset for global input indexing
+    global_offset = BsIdx * Nh * N * dim + NhIdx * N * dim
 
     ### Assign shared memory
     BrSize = BrDim * dim
@@ -54,7 +59,7 @@ def flash_attention(Q, K, V, O, L, BrDim, BcDim, N, dim):
         for j in range(TcIdx, dim, TcDim):
             idx = BrIdx * BrDim + i
             if idx < N:
-                Qs[i * dim + j] = Q[idx * dim + j]
+                Qs[i * dim + j] = Q[global_offset + idx * dim + j]
 
     ### Loop over column blocks of K and V
     num_Bc = (N + BcDim - 1) // BcDim
@@ -65,8 +70,8 @@ def flash_attention(Q, K, V, O, L, BrDim, BcDim, N, dim):
             for j in range(TcIdx, dim, TcDim):
                 idx = BcIdx * BcDim + i
                 if idx < N:
-                    Ks[i * dim + j] = K[idx * dim + j]
-                    Vs[i * dim + j] = V[idx * dim + j]
+                    Ks[i * dim + j] = K[global_offset + idx * dim + j]
+                    Vs[i * dim + j] = V[global_offset + idx * dim + j]
         ncuda.syncthreads()
 
         ### Compute attention scores
@@ -103,7 +108,7 @@ def flash_attention(Q, K, V, O, L, BrDim, BcDim, N, dim):
                 
                 # Store expMaxDelta and ms values
                 if TcIdx == 0:
-                    expMaxDelta[i] = max(math.exp(ms[i] - row_max), 1e-30)
+                    expMaxDelta[i] = math.exp(ms[i] - row_max)
                     ms[i] = row_max
         ncuda.syncthreads()
 
@@ -120,7 +125,7 @@ def flash_attention(Q, K, V, O, L, BrDim, BcDim, N, dim):
                 
                 # Update ls
                 if TcIdx == 0:
-                    ls[i] = max(ls[i] * expMaxDelta[i] + row_sum, 1e-30) #update min value if changing precision
+                    ls[i] = max(ls[i] * expMaxDelta[i] + row_sum, 1e-7)
                 
                 # Update Os
                 for j in range(TcIdx, dim, TcDim):
@@ -128,7 +133,7 @@ def flash_attention(Q, K, V, O, L, BrDim, BcDim, N, dim):
                     for k in range(BcDim):
                         if BcIdx * BcDim + k < N:
                             pv += Ss[i * BcDim + k] * Vs[k * dim + j]
-                    Os[i * dim + j] = Os[i * dim + j] / expMaxDelta[i] + pv
+                    Os[i * dim + j] = Os[i * dim + j] * expMaxDelta[i] + pv
         ncuda.syncthreads()
 
     ### Update final Oi and li
@@ -145,9 +150,9 @@ def flash_attention(Q, K, V, O, L, BrDim, BcDim, N, dim):
         idx = BrIdx * BrDim + i
         if idx < N:
             for j in range(TcIdx, dim, TcDim):
-                O[idx * dim + j] = Os[i * dim + j]
+                O[global_offset + idx * dim + j] = Os[i * dim + j]
             if TcIdx == 0:
-                L[idx] = ls[i]
+                L[BsIdx * Nh * N + NhIdx * N + idx] = ls[i]
     
 def standard_attention(Q, K, V):
     d = Q.size(-1)
@@ -159,8 +164,10 @@ def standard_attention(Q, K, V):
 class TestFlashAttention(CUDATestCase):
     def test_flash_attention(self):
         # Test parameters
+        Bs = 2
+        Nh = 2
         N = 1024
-        dim = 64
+        dim = 32
 
         # Calculate BrDim and BcDim based on shared memory constraints
         max_shared_mem_bytes = ncuda.get_current_device().MAX_SHARED_MEMORY_PER_BLOCK
@@ -176,24 +183,23 @@ class TestFlashAttention(CUDATestCase):
         TrDim = 16
         TcDim = 32
         tpb = (TcDim, TrDim)
-        blocks = cdiv(N,BrDim)
-        print('BrDim:', BrDim, 'BcDim:', BcDim, 'N:', N, 'dim:', dim)
+        blocks = (cdiv(N,BrDim), Nh, Bs)
+        print('BrDim:', BrDim, 'BcDim:', BcDim, 'Bs:', Bs, 'Nh:', Nh, 'N:', N, 'dim:', dim)
         print('blocks:', blocks, 'tpb:', tpb, 'shared_mem_size:', shared_mem_size, "max_shared_mem_bytes:", max_shared_mem_bytes)
 
         # Prepare input and output arrays
-        Q = torch.randn(N * dim, dtype=torch.float32).contiguous().cuda()
-        K = torch.randn(N * dim, dtype=torch.float32).contiguous().cuda()
-        V = torch.randn(N * dim, dtype=torch.float32).contiguous().cuda()
-        output_O = torch.zeros(N * dim, dtype=torch.float32).contiguous().cuda()
-        output_L = torch.zeros(N, dtype=torch.float32).contiguous().cuda()
+        Q = torch.randn(Bs * Nh * N * dim, dtype=torch.float32).contiguous().cuda()
+        K = torch.randn(Bs * Nh * N * dim, dtype=torch.float32).contiguous().cuda()
+        V = torch.randn(Bs * Nh * N * dim, dtype=torch.float32).contiguous().cuda()
+        output_O = torch.zeros(Bs * Nh * N * dim, dtype=torch.float32).contiguous().cuda()
+        output_L = torch.zeros(Bs * Nh * N, dtype=torch.float32).contiguous().cuda()
 
+        flash_attention[blocks, tpb, 0, shared_mem_size](ca(Q), ca(K), ca(V), ca(output_O), ca(output_L), BrDim, BcDim, Bs, Nh, N, dim)
 
-        flash_attention[blocks, tpb, 0, shared_mem_size](ca(Q), ca(K), ca(V), ca(output_O), ca(output_L), BrDim, BcDim, N, dim)
-
-        # Compute expected output using torch implemntation of flash attention
-        Q_torch = Q.view(N, dim).clone()
-        K_torch = K.view(N, dim).clone()
-        V_torch = V.view(N, dim).clone()
+        # Compute expected output using torch implementation of flash attention
+        Q_torch = Q.view(Bs, Nh, N, dim).clone()
+        K_torch = K.view(Bs, Nh, N, dim).clone()
+        V_torch = V.view(Bs, Nh, N, dim).clone()
         expected_O_torch = torch.nn.functional.scaled_dot_product_attention(Q_torch, K_torch, V_torch)
         expected_O_torch = expected_O_torch.flatten()
 
