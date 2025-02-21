@@ -14,7 +14,7 @@ Key Features:
 import math
 import numpy as np
 import numba.cuda as ncuda
-from ..utils import cdiv
+from .utils import cdiv
 import torch
 
 @ncuda.jit
