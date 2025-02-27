@@ -107,10 +107,19 @@ __global__ void flash_attention_kernel(const half* __restrict__ Q, const half* _
 
     const int global_offset = BsIdx * Nh * N * dim + NhIdx * N * dim;
 
-    // Initialize ms
+    // Initialize ms and ls
     for (int i = TrIdx * TcDim + TcIdx; i < BrDim; i += TrDim * TcDim) {
         ms[i] = -INFINITY;
+        ls[i] = 0.0f;  // Initialize ls to 0
     }
+    
+    // Initialize Os to zeros
+    for (int i = TrIdx; i < BrDim; i += TrDim) {
+        for (int j = TcIdx; j < dim; j += TcDim) {
+            Os[i * dim + j] = __float2half(0.0f);
+        }
+    }
+    __syncthreads();
 
     // Load Q into shared memory
     for (int i = TrIdx; i < BrDim; i += TrDim) {
