@@ -15,7 +15,6 @@ import numba.cuda as ncuda
 from numba.cuda.testing import CUDATestCase
 
 from ..implementations.flash_attention2_numba import flash_attention2_launcher as flash_attention_numba
-from ..flash_attention2_pytorch import flash_attention_2 as flash_attention_pytorch
 
 def standard_attention(Q, K, V):
     """
@@ -75,36 +74,6 @@ class TestFlashAttention(CUDATestCase):
             output_numba.cpu(), expected_output.cpu(),
             rtol=1e-5, atol=1e-5,
             msg="Numba implementation output differs from PyTorch's native implementation"
-        )
-    
-    def test_pytorch_implementation(self):
-        """Test the PyTorch implementation against PyTorch's native attention."""
-        # Run our PyTorch implementation
-        output, _ = flash_attention_pytorch(self.Q, self.K, self.V, 32, 64)
-        
-        # Run PyTorch's native implementation
-        expected_output = F.scaled_dot_product_attention(self.Q, self.K, self.V)
-        
-        # Compare results
-        torch.testing.assert_close(
-            output.cpu(), expected_output.cpu(),
-            rtol=1e-5, atol=1e-5,
-            msg="PyTorch implementation output differs from PyTorch's native implementation"
-        )
-    
-    def test_implementations_match(self):
-        """Test that both implementations produce the same results."""
-        # Run Numba implementation
-        output_numba, _ = flash_attention_numba(self.Q, self.K, self.V)
-        
-        # Run PyTorch implementation
-        output_pytorch, _ = flash_attention_pytorch(self.Q, self.K, self.V, 32, 64)
-        
-        # Compare results
-        torch.testing.assert_close(
-            output_numba.cpu(), output_pytorch.cpu(),
-            rtol=1e-5, atol=1e-5,
-            msg="Numba and PyTorch implementations produce different results"
         )
 
 if __name__ == '__main__':
