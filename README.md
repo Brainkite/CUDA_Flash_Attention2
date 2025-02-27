@@ -67,7 +67,7 @@ Install the required packages:
 pip install numba torch
 ```
 
-## Running the Code
+<!-- ## Running the Code
 
 ### Numba Version
 
@@ -141,4 +141,4 @@ This project is licensed under the [MIT License](LICENSE).
 
 ## Acknowledgements
 
-This project was inspired by the FlashAttention 2 paper and serves as an exercise in advanced CUDA programming and parallel processing.
+This project was inspired by the FlashAttention 2 paper and serves as an exercise in advanced CUDA programming and parallel processing. -->
