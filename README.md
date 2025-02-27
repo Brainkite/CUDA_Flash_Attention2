@@ -12,41 +12,7 @@ This repository is an **educational exercise** to implement the FlashAttention 2
 
 FlashAttention 2 efficiently computes scaled dot-product attention by splitting input matrices into blocks and leveraging on-chip SRAM, custom reductions, and careful kernel synchronization. This exercise follows the algorithm described below:
 
-```latex
-\begin{algorithm}[H]
-  \caption{\small\label{alg:fwd_full}\sysname Forward Pass}
-  \begin{algorithmic}[1]
-    \REQUIRE Matrices $\vQ, \vK, \vV \in \mathbb{R}^{N \times d}$ in HBM, on-chip SRAM of
-    size $M$, softmax scaling constant $\tau \in \mathbb{R}$, masking function
-    $\textsc{mask}$, dropout probability $p_\mathrm{drop}$.
-    \STATE Initialize the pseudo-random number generator state ${\cal R}$ and save to HBM.
-    \STATE Set block sizes $B_c = \left\lceil \frac{M}{4d} \right\rceil, B_r = \min \left( \left\lceil \frac{M}{4d} \right\rceil , d \right)$.
-    \STATE Initialize $\vO = (0)_{N \times d} \in \mathbb{R}^{N \times d}, \ell = (0)_N \in \mathbb{R}^{N}, m = (-\infty)_N \in \mathbb{R}^{N}$ in HBM.
-    \STATE Divide $\vQ$ into $T_r = \left\lceil\frac{N}{B_r} \right\rceil$ blocks $\vQ_1, \dots, \vQ_{T_r}$ of size $B_r \times d$ each,
-    and divide $\vK, \vV$ in to $T_c = \left\lceil \frac{N}{B_c} \right\rceil$ blocks $\vK_1, \dots, \vK_{T_c}$ and
-    $\vV_1, \dots, \vV_{T_c}$, of size $B_c \times d$ each.
-    \STATE Divide $\vO$ into $T_r$ blocks $\vO_i, \dots, \vO_{T_r}$ of size
-    $B_r \times d$ each, divide $\ell$ into $T_r$ blocks $\ell_i, \dots, \ell_{T_r}$ of size
-    $B_r$ each, divide $m$ into $T_r$ blocks $m_1, \dots, m_{T_r}$ of size $B_r$ each.
-    \FOR{$1 \le j \le T_c$}
-      \STATE Load $\vK_j, \vV_j$ from HBM to on-chip SRAM.
-      \FOR{$1 \le i \le T_r$}
-        \STATE Load $\vQ_i, \vO_i, \ell_i, m_i$ from HBM to on-chip SRAM.
-        \STATE On chip, compute $\vS_{ij} = \tau \vQ_i \vK_j^T \in \mathbb{R}^{B_r \times B_c}$.
-        \STATE On chip, compute $\vS_{ij}^{\mathrm{masked}} = \textsc{mask}(\vS_{ij})$.
-        \STATE On chip, compute $\tilde{m}_{ij} = \mathrm{rowmax}(\vS_{ij}^{\mathrm{masked}}) \in \mathbb{R}^{B_r}$, $\tilde{\vP}_{ij} = \exp(\vS_{ij}^{\mathrm{masked}} - \tilde{m}_{ij}) \in \mathbb{R}^{B_r \times B_c}$ (pointwise),
-        $\tilde{\ell}_{ij} = \mathrm{row sum}(\tilde{\vP}_{ij}) \in \mathbb{R}^{B_r}$.
-        \STATE On chip, compute $m_i^{\mathrm{new}} = \max(m_i, \tilde{m}_{ij}) \in \mathbb{R}^{B_r}$, $\ell_i^{\mathrm{new}} = e^{m_i - m_i^{\mathrm{new}}} \ell_i + e^{\tilde{m}_{ij} - m_i^{\mathrm{new}}} \tilde{\ell}_{ij} \in \mathbb{R}^{B_r}$.
-        \STATE On chip, compute $\tilde{\vP}_{ij}^{\mathrm{dropped}} = \mathrm{dropout}(\tilde{\vP}_{ij}, p_\mathrm{drop})$.
-        \STATE Write $\vO_i \leftarrow \diag(\ell_i^{\mathrm{new}})^{-1}(\diag(\ell_i) e^{m_i - m_i^{\mathrm{new}}} \vO_i + e^{\tilde{m}_{ij} - m_i^{\mathrm{new}}}\tilde{\vP}_{ij}^{\mathrm{dropped}} \vV_j)$
-        to HBM.
-        \STATE Write $\ell_i \leftarrow \ell_i^{\mathrm{new}}$, $m_i \leftarrow m_i^{\mathrm{new}}$ to HBM.
-      \ENDFOR
-    \ENDFOR
-    \STATE Return $\vO, \ell, m, {\cal R}$.
-  \end{algorithmic}
-\end{algorithm}
-```
+![FlashAttention-2 Forward Pass](algo_forward.jpg)
 
 ## Repository Structure
 
