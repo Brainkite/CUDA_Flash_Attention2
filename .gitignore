@@ -1,6 +1,7 @@
 **/build
 *.pyc
 *.egg-info
+*.ncu-rep
 *.so
 **/__pycache__
 **/.pytest_cache
