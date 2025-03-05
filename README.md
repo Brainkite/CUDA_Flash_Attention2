@@ -1,4 +1,4 @@
-# FlashAttention 2 Implementation in Numba and CUDA
+# ⚡FlashAttention2⚡ Implementation in Numba and CUDA
 
 This repository attempts to implements the FlashAttention 2 algorithm as described in the research paper. The project provides two implementations:
 
@@ -7,11 +7,11 @@ This repository attempts to implements the FlashAttention 2 algorithm as describ
 
 ## Overview
 
-FlashAttention 2 efficiently computes scaled dot-product attention by splitting input matrices into blocks and leveraging on-chip SRAM, custom reductions, and careful kernel synchronization. This project is intended to:
+🔍 FlashAttention 2 efficiently computes scaled dot-product attention by splitting input matrices into blocks and leveraging on-chip SRAM, custom reductions, and careful kernel synchronization. This project is intended to:
 
-- Experiment with advanced CUDA programming techniques
-- Provide a reference Numba implementation for rapid prototyping and testing
-- Offer profiling and benchmarking tools to evaluate performance
+- 🔬 Experiment with advanced CUDA programming techniques
+- ⚡ Provide a reference Numba implementation for rapid prototyping and testing
+- 📊 Offer profiling and benchmarking tools to evaluate performance
 
 ## Installation and Requirements
 
