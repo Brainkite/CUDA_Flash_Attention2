@@ -103,7 +103,6 @@ The FlashAttention 2 kernel is primarily limited by shared memory usage and inef
 
 The most promising optimization approaches would be to:
 1. Optimize shared memory access patterns to reduce uncoalesced accesses
-2. Reconsider the shared memory usage strategy to improve occupancy
-3. Restructure the code to increase instruction-level parallelism and reduce dependencies
+2. Restructure the code to increase instruction-level parallelism and reduce dependencies
 
 These changes could significantly improve the kernel's performance by increasing occupancy, reducing stalls, and making more efficient use of the available hardware resources.

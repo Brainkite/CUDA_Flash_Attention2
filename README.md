@@ -1,144 +1,94 @@
 # FlashAttention 2 Implementation in Numba and CUDA
 
-This repository is an attempt to implement the FlashAttention 2 algorithm from the research paper. The project leverages asynchronous parallel processing and layered memory management techniques by implementing the algorithm in two ways:
+This repository attempts to implements the FlashAttention 2 algorithm as described in the research paper. The project provides two implementations:
 
-- **Numba-based Implementation:**  
-  Uses Python with Numba's CUDA JIT facilities to get a better grasp of the algorithm before implementing the CUDA verison.
-  
-- **CUDA C++ Implementation:**  
-  Uses raw CUDA to implement the FlashAttention 2 forward pass
+- **Numba-based Implementation:** A Python version using Numba's CUDA JIT to gain insight into the algorithm before the full CUDA implementation.
+- **CUDA C++ Implementation:** Work in progress CUDA implementation. Currently numericaly stable and accurate and reproduces the tiled computation of attention as described in the Flash Attention 2 Paper.
 
 ## Overview
 
-FlashAttention 2 efficiently computes scaled dot-product attention by splitting input matrices into blocks and leveraging on-chip SRAM, custom reductions, and careful kernel synchronization. This exercise follows the algorithm described below:
+FlashAttention 2 efficiently computes scaled dot-product attention by splitting input matrices into blocks and leveraging on-chip SRAM, custom reductions, and careful kernel synchronization. This project is intended to:
 
-![FlashAttention-2 Forward Pass](algo_forward.jpg)
-
-## Repository Structure
-
-```
-.
-├── cuda_flash2
-│   ├── flash_attention_2.cu      # Main CUDA implementation
-│   ├── cuda_check.cu            # CUDA environment validation
-│   └── profile_output.ncu-rep   # Performance profiling results
-├── numba_flash2
-│   ├── __init__.py
-│   └── src
-│       ├── flash_attention2.py           # Main Numba implementation
-│       ├── flash_attention2_pytorch.py   # PyTorch reference implementation
-│       ├── utils.py                      # Utility functions
-│       └── flash_attention_decomposed/   # Modular components
-└── examples
-    └── UsageExample.ipynb       # Comprehensive usage examples and benchmarks
-```
-
-## Documentation
-
-The codebase is extensively documented with:
-
-- **Inline Documentation:** Detailed function and class docstrings explaining:
-  - Purpose and algorithm details
-  - Input/output specifications
-  - Performance considerations
-  - Memory layout and management
-  - Implementation notes
-
-- **Usage Examples:** The `examples/UsageExample.ipynb` notebook provides:
-  - Step-by-step usage instructions
-  - Performance benchmarking
-  - Comparison with PyTorch's native attention
-  - Parameter tuning guidelines
+- Experiment with advanced CUDA programming techniques
+- Provide a reference Numba implementation for rapid prototyping and testing
+- Offer profiling and benchmarking tools to evaluate performance
 
 ## Installation and Requirements
 
-- **Hardware:** CUDA-enabled GPU  
-- **Software:**  
-  - Python (>= 3.7)  
-  - [Numba](https://numba.pydata.org/)  
-  - [PyTorch](https://pytorch.org/)  
-  - CUDA Toolkit (compatible version with your GPU)
+### Hardware
 
-### Dependencies
+- CUDA-enabled GPU
 
-Install the required packages:
+### Software Requirements
 
-```bash
-pip install numba torch
-```
+#### NVIDIA CUDA Toolkit and Libraries
 
-<!-- ## Running the Code
+Ensure you have the CUDA Toolkit installed (tested with CUDA 12.x) along with compatible NVIDIA drivers.
 
-### Numba Version
+#### Python Environment
 
-To run the tests for the Numba implementation:
+Use Python 3.7 or later
+- Numba
+- NumPy
+- PyTorch
+
+Simply install these with:
 
 ```bash
-python -m unittest discover -s numba_flash2/src -p '*_test.py'
+pip install numba numpy torch
 ```
 
-Or run the main flash attention script:
+
+## Running the Code
+
+### Numba Implementation
+
+To run the Numba-based version:
+
+Run the main Numba script:
 
 ```bash
-python numba_flash2/src/flash_attention2.py
+python numba_flash2/src/implementations/flash_attention2_numba.py
 ```
 
-### CUDA Version
-
-Compile the CUDA code with `nvcc`:
+Or run the tests for the Numba implementation:
 
 ```bash
-nvcc -arch=sm_70 cuda_flash2/flash_attention_2.cu -o flash_attention_2
+python -m unittest discover -s numba_flash2/src/tests -p '*_test.py'
 ```
 
-Then execute:
+### CUDA Implementation
+
+#### Building the CUDA Code
+
+Navigate to the repository root and compile using nvcc. For example:
+
+```bash
+nvcc -arch=sm_70 cuda_flash2/src/flash_attention_2.cu -o flash_attention_2
+```
+
+#### Running the CUDA Code
+
+Execute the compiled binary:
 
 ```bash
 ./flash_attention_2
 ```
 
-## Performance Tuning
+#### Running CUDA Tests
 
-The implementation allows for performance tuning through several parameters:
+CUDA tests are located in the `cuda_flash2/src/tests` directory. Compile and run them similarly. For example, to compile a test:
 
-1. **Block Sizes:**
-   - `BrDim`: Row block size
-   - `BcDim`: Column block size
-   These can be adjusted based on your GPU's shared memory capacity and compute capabilities.
+```bash
+nvcc -arch=sm_70 cuda_flash2/src/tests/test_flash_attention2.cu -o test_flash_attention2
+```
 
-2. **Thread Block Configuration:**
-   - Configurable thread block dimensions for optimal occupancy
-   - Default values are optimized for common GPU architectures
+Then execute:
 
-3. **Memory Management:**
-   - Careful shared memory allocation
-   - Efficient data loading patterns
-   - Optimized memory access patterns
+```bash
+./test_flash_attention2
+```
 
-See the usage examples for detailed performance tuning guidelines.
+### Profiling
 
-## Benchmarks and Comparison
-
-The file `flash_attention2_pytorch.py` provides utilities for benchmarking and comparing with:
-- PyTorch's native scaled dot-product attention
-- Standard attention implementation
-- Memory usage analysis
-- Performance profiling
-
-## Future Work and Contributions
-
-- **Enhance Documentation:** Better inline comments and additional documentation in the docs folder.  
-- **Expand Tests:** Organize and extend tests in a dedicated `tests/` folder.  
-- **CI Integration:** Add GitHub Actions workflows to run tests automatically.  
-- **Performance Tuning:** Further optimize kernel configurations and memory usage.  
-- **Additional Examples:** Provide notebooks and tutorials for end-to-end demonstrations.
-
-Contributions are welcome! Please feel free to submit issues or pull requests.
-
-## License
-
-This project is licensed under the [MIT License](LICENSE).
-
-## Acknowledgements
-
-This project was inspired by the FlashAttention 2 paper and serves as an exercise in advanced CUDA programming and parallel processing. -->
+For performance analysis, additional profiling tools and scripts are provided. Check the `cuda_flash2/profile_flash_attention` directory and refer to `cuda_flash2/profiling_report.md` for details on interpreting the profiling results.
