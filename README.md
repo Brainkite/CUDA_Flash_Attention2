@@ -1,6 +1,6 @@
 # ⚡FlashAttention2⚡ Implementation in Numba and CUDA
 
-This repository attempts to implements the FlashAttention 2 algorithm as described in the research paper. The project provides two implementations:
+WIP - This repository attempts to implements the FlashAttention 2 algorithm as described in the research paper. The project provides two implementations:
 
 - **Numba-based Implementation:** A Python version using Numba's CUDA JIT to gain insight into the algorithm before the full CUDA implementation.
 - **CUDA C++ Implementation:** Work in progress CUDA implementation. Currently numericaly stable and accurate and reproduces the tiled computation of attention as described in the Flash Attention 2 Paper.
